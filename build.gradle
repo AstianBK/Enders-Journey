@@ -105,7 +105,8 @@ repositories {
     maven {
         url 'https://jitpack.io'
         credentials {
-
+            username 'AstianBK'
+            password 'gamas1311'
         }
     }
 

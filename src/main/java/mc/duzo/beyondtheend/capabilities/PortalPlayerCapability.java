@@ -15,6 +15,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -32,6 +33,7 @@ import net.minecraftforge.common.capabilities.ICapabilitySerializable;
 import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.checkerframework.checker.nullness.qual.NonNull;
+import org.checkerframework.checker.units.qual.C;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -91,7 +93,6 @@ public class PortalPlayerCapability implements PortalPlayer{
                     for(Map.Entry<ItemStack,BlockPos> posEntry:DimensionUtil.eyeItemForBlockPos.entrySet()){
                         ColumnBlockEntity block= (ColumnBlockEntity) level.getBlockEntity(posEntry.getValue());
                         if(block!=null && posEntry.getKey().is(stack)){
-                            EndersJourney.LOGGER.debug("Se marco el cambio");
                             block.setChanged();
                         }
                     }
@@ -106,7 +107,7 @@ public class PortalPlayerCapability implements PortalPlayer{
 
     }
 
-    private Item getItem(ResourceLocation location) {
+    public static Item getItem(ResourceLocation location) {
         Holder<Item> holder=ForgeRegistries.ITEMS.getHolder(location).orElse(null);
         if(holder!=null){
             return holder.get();
@@ -253,12 +254,28 @@ public class PortalPlayerCapability implements PortalPlayer{
     public CompoundTag serializeNBT() {
         CompoundTag tag=new CompoundTag();
         tag.putInt("eyes",this.getEyesEarn());
+        if(!this.eyesEarns.isEmpty()){
+            ListTag listTag=new ListTag();
+            for(ResourceLocation location : this.eyesEarns){
+                CompoundTag tag1=new CompoundTag();
+                tag1.putString("id",location.toString());
+                listTag.add(tag1);
+            }
+            tag.put("eyesEarns",listTag);
+        }
         return tag;
     }
 
     @Override
     public void deserializeNBT(CompoundTag nbt) {
         this.setEyesEarn(nbt.getInt("eyes"));
+        if(nbt.contains("eyesEarns",9)){
+            ListTag tags=nbt.getList("eyesEarns",10);
+            for(int i=0;i<tags.size();i++){
+                CompoundTag tag=tags.getCompound(i);
+                this.eyesEarns.add(new ResourceLocation(tag.getString("id")));
+            }
+        }
     }
 
     private void handleAetherPortal() {

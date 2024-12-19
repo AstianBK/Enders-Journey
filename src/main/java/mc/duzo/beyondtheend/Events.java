@@ -1,10 +1,10 @@
 package mc.duzo.beyondtheend;
 
+import com.klikli_dev.occultism.registry.OccultismBlocks;
 import mc.duzo.beyondtheend.capabilities.BkCapabilities;
 import mc.duzo.beyondtheend.capabilities.PortalPlayer;
 import mc.duzo.beyondtheend.capabilities.PortalPlayerCapability;
 import mc.duzo.beyondtheend.common.DimensionUtil;
-import mc.duzo.beyondtheend.common.block_entity.ColumnBlockEntity;
 import mc.duzo.beyondtheend.mixin.common.AdvancementsProgressAccessor;
 import mc.duzo.beyondtheend.network.PacketHandler;
 import mc.duzo.beyondtheend.network.message.PacketSync;
@@ -23,6 +23,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
 import net.minecraftforge.event.TickEvent;
@@ -40,6 +41,9 @@ import net.minecraftforge.eventbus.api.Event;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.LogicalSide;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.registries.ForgeRegistries;
+
+import java.util.ArrayList;
 
 @Mod.EventBusSubscriber(modid = EndersJourney.MODID)
 public class Events {
@@ -50,18 +54,20 @@ public class Events {
         DimensionUtil.startInBEL(player);
     }
     @SubscribeEvent
-    public static void onAdvancementEarn(AdvancementEvent.AdvancementProgressEvent event){
+    public static void onAdvancementRevoke(AdvancementEvent.AdvancementProgressEvent event){
         if(event.getProgressType()== AdvancementEvent.AdvancementProgressEvent.ProgressType.REVOKE){
             Player player = event.getEntity();
             PortalPlayer.get(player).ifPresent(portalPlayer -> {
                 if(player instanceof ServerPlayer player1){
                     int eyes=DimensionUtil.getEyesEarn(((AdvancementsProgressAccessor)player1.getAdvancements()).list(),portalPlayer);
                     portalPlayer.setEyesEarn(eyes);
+                    portalPlayer.setListEye(new ArrayList<>());
                     if(!player.level.isClientSide){
                         PacketHandler.sendToPlayer(new PacketSync(eyes), player1);
                         PacketHandler.sendToPlayer(new PacketUpdateChuck(),player1);
                     }
                 }
+
             });
         }
     }
@@ -69,17 +75,75 @@ public class Events {
     public static void onAdvancementEarn(AdvancementEvent.AdvancementEarnEvent event){
         if(DimensionUtil.eyesLocation.contains(event.getAdvancement().getId())){
             PortalPlayer.get(event.getEntity()).ifPresent(portalPlayer -> {
-                portalPlayer.plusEye(event.getAdvancement().getId());
-                Item heart=
-                event.getEntity().getInventory().add(1,)
-                if(!event.getEntity().level.isClientSide){
+                if(!portalPlayer.getList().contains(event.getAdvancement().getId())){
                     event.getEntity().level.players().forEach(player -> {
                         PortalPlayer.get(player).ifPresent(portalPlayer1 -> {
                             portalPlayer.plusEye(event.getAdvancement().getId());
+                            giveHeartContainer(player);
                         });
                     });
+                    placeOrReloadStorage(portalPlayer.getPlayer().level,portalPlayer.getEyesEarn());
                 }
             });
+        }
+    }
+
+    private static void placeOrReloadStorage(Level level,int eyeEarn) {
+        if(!level.isClientSide){
+            BlockState prevState=level.getBlockState(new BlockPos(0 ,114, 31));
+            BlockState state=getBlockStateForEye(eyeEarn);
+            boolean flag=prevState.isAir() || newStateIsDowngrade(prevState,state);
+            if(state!=null && flag){
+                level.setBlock(new BlockPos(0 ,114, 31),state.setValue(BlockStateProperties.FACING,Direction.DOWN),3);
+            }
+        }
+    }
+
+    private static boolean newStateIsDowngrade(BlockState prevState, BlockState state) {
+        if(state==null){
+            return false;
+        }
+        int idPrevState=getIdForState(prevState);
+        int idNewState=getIdForState(state);
+        return idPrevState<idNewState;
+    }
+
+    private static int getIdForState(BlockState prevState) {
+        String name = ForgeRegistries.BLOCKS.getKey(prevState.getBlock()).toString();
+        return name.split(":")[1].charAt(23);
+    }
+
+    private static BlockState getBlockStateForEye(int eyeEarn) {
+        switch (eyeEarn){
+            case 3->{
+                return OccultismBlocks.STORAGE_STABILIZER_TIER1.get().defaultBlockState();
+            }
+            case 7->{
+                return OccultismBlocks.STORAGE_STABILIZER_TIER2.get().defaultBlockState();
+            }
+            case 13->{
+                return OccultismBlocks.STORAGE_STABILIZER_TIER3.get().defaultBlockState();
+            }
+            case 18->{
+                return OccultismBlocks.STORAGE_STABILIZER_TIER4.get().defaultBlockState();
+            }
+        }
+        return null;
+    }
+
+    private static void giveHeartContainer(Player player) {
+        Item heart=PortalPlayerCapability.getItem(new ResourceLocation("paraglider","heart_container"));
+        if(heart!=null){
+            if (!player.level.isClientSide) {
+                ItemStack stack=new ItemStack(heart);
+                if(!player.getAbilities().instabuild){
+                    if (!player.addItem(stack)) {
+                        player.spawnAtLocation(new ItemStack(heart));
+                    }
+                }
+            }
+        }else {
+            EndersJourney.LOGGER.debug("Not found item");
         }
     }
 

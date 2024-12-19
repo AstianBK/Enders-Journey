@@ -33,6 +33,8 @@ public class PacketHandler {
         channel.registerMessage(index++, PacketSync.class, PacketSync::write,
                 PacketSync::new, PacketSync::handle);
 
+
+
         channel.registerMessage(index++, PacketCloneSync.class, PacketCloneSync::write,
                 PacketCloneSync::new, PacketCloneSync::handle);
 
